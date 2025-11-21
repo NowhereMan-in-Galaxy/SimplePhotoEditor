@@ -283,6 +283,9 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
                     v.parent.requestDisallowInterceptTouchEvent(true)
                     lastX = event.rawX
                     lastY = event.rawY
+                    // IMPORTANT: Re-sync scaleFactor with the view's current scale
+                    // This ensures that subsequent scaling operations start from the correct base
+                    scaleFactor = v.scaleX
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (!scaleDetector.isInProgress) { // 如果不是在缩放，才进行移动
