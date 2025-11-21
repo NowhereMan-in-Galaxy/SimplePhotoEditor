@@ -85,6 +85,7 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
                     canvasContainer.removeAllViews()
                     // 把占位文字加回来
                     val placeholder = android.widget.TextView(context).apply {
+                        id = R.id.tvPlaceholder // Assign the ID here
                         text = "Tap photos to add stickers"
                         setTextColor(0xFFDDDDDD.toInt())
                         layoutParams = FrameLayout.LayoutParams(
