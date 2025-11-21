@@ -60,6 +60,52 @@ SimplePhotoEditor 采用双页面架构设计，旨在提供流畅的图片采�
     * 连接 Android 真机（推荐 Android 10.0+ 以获得最佳沉浸式体验）。
     * 选择 `app` 模块，点击 **Run** (绿色播放键)。
 
+---
+# 📘 基础项目报告 (Basic Project Report)
+
+## 1. 整体设计 (Architecture & Design)
+本项目采用 **Single Activity + ViewPager2** 的双页面架构，旨在打造“暗房采样”与“手帐拼贴”的无缝工作流。
+
+* **技术栈**：Kotlin, Jetpack (ViewModel, Coroutines), OpenGL ES 2.0, MediaStore API。
+* **模块划分**：
+    * **Sampler (编辑器)**：基于 `GLSurfaceView`，负责高性能的图片显示与蒙版裁切。核心渲染逻辑封装于 `PhotoRenderer` 类中。
+    * **Journal (手帐)**：基于 `FrameLayout` 的自由画布，支持多图层叠加与交互。
+    * **Data Layer**：统一封装 `MediaStore` 查询逻辑，通过协程实现异步加载，确保主线程流畅。
+
+## 2. 开发遇到的困难与解决方案 (Challenges & Solutions)
+
+### 难点一：OpenGL 图片拉伸与黑边问题
+* **问题描述**：直接将非正方形图片贴图到 OpenGL 纹理时，图片会被强制拉伸以填充屏幕；且边缘在某些机型上出现黑色杂边。
+* **解决思路**：
+    1. **防畸变**：在 Kotlin 层计算 `imageRatio` 与 `viewRatio`，传入 Shader。在顶点着色器中对纹理坐标进行逆向缩放，实现类似 `ImageView.ScaleType.FIT_CENTER` 的效果。
+    2. **去黑边**：设置纹理环绕模式为 `GL_CLAMP_TO_EDGE`，防止 UV 坐标越界采样。
+
+### 难点二：手势冲突 (Gesture Conflicts)
+* **问题描述**：在画布上进行单指拖拽或双指缩放时，极易误触 `ViewPager2` 的翻页操作。
+* **解决思路**：实现 `View.OnTouchListener`，在 `ACTION_DOWN` 事件触发时，调用 `parent.requestDisallowInterceptTouchEvent(true)`，强制父容器交出事件控制权；在 `ACTION_UP` 时释放。
+
+### 难点三：PNG 透明背景保存
+* **问题描述**：保存圆形裁剪图片时，背景默认为黑色而非透明。
+* **解决思路**：
+    1. 配置 `GLSurfaceView` 支持 Alpha 通道 (`setEGLConfigChooser(8,8,8,8,16,0)`)。
+    2. 将 `glClearColor` 设为全透明。
+    3. 导出时使用 `Bitmap.CompressFormat.PNG` 格式。
+
+---
+
+# 🚀 进阶任务完成报告 (Advanced Task Report)
+
+## P2: 图像编辑初体验 (Image Editing Basics)
+
+### 1. 功能实现思路
+为了实现**“蒙版固定、风景移动”**的高级交互感（类似 Instagram 头像裁剪）：
+* **坐标系解耦**：我不移动 OpenGL 的顶点坐标（`gl_Position`），而是通过 Shader 变换 **纹理坐标（Texture Coordinates）**。
+* **算法逻辑**：
+    * 用户的手势位移 (`transX/Y`) 被反向作用于纹理采样坐标。
+    * 蒙版计算使用原始坐标（保持静止），图片采样使用变换后的坐标（随手势移动）。
+      这就实现了“窗户不动，窗外风景在动”的视觉效果。
+
+
 ### 生成发布包
 在 Android Studio 的 Terminal 中执行：
 ```bash
@@ -68,3 +114,5 @@ SimplePhotoEditor 采用双页面架构设计，旨在提供流畅的图片采�
 
 # 生成 AAB (Google Play)
 ./gradlew bundleRelease
+
+
