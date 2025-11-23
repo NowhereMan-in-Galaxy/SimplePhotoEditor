@@ -39,7 +39,25 @@ SimplePhotoEditor 采用双页面架构设计，旨在提供流畅的图片采�
   </tr>
 </table>
 
+# 待开发功能
 
+## ui ux
+
+- [x]  download feat
+- [ ]  mask and others
+- [ ] 
+
+## Features
+
+- journal
+    - [x]  fix：图片移动和缩放不顺畅
+    - [x]  fix：journal页图片缩放和旋转会颤抖滑动，文字缩放不了
+    - [ ]  文字彻底改版，学习instagram的界面风格，还要加背景
+    - [x]  Text journal页面添加文字部分，后期要能选字体
+- SAMPLAR
+    - [ ]  蒙版功能的改进
+    - [ ]  滤镜功能，采样后可以改颜色，加滤镜
+- 
 ## 🛠️ 构建与运行 (Build & Run)
 
 ### 环境要求 (Prerequisites)
