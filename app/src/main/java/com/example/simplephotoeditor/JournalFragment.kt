@@ -13,6 +13,10 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.view.GestureDetector
+import android.graphics.Color
+import android.graphics.Typeface
+import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
@@ -124,30 +128,37 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
 
     // 显示文字输入对话框
     private fun showTextInputDialog() {
-        val inputEditText = EditText(requireContext()).apply {
-            hint = "请输入文字"
-            setTextSize(18f)
-            setTextColor(ContextCompat.getColor(requireContext(), android.R.color.black))
-            setBackgroundColor(ContextCompat.getColor(requireContext(), android.R.color.white))
-            setPadding(32, 32, 32, 32)
+        // 1. 加载我们画好的布局
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_add_text, null)
+        val inputEditText = dialogView.findViewById<EditText>(R.id.etInput)
+        val btnCancel = dialogView.findViewById<View>(R.id.btnCancel)
+        val btnConfirm = dialogView.findViewById<View>(R.id.btnConfirm)
+
+        // 2. 创建 Dialog
+        val dialog = AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .create()
+
+        // 3. 【关键】设置背景透明，否则圆角会被系统的白色方框挡住
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        // 4. 按钮点击事件
+        btnCancel.setOnClickListener { dialog.dismiss() }
+
+        btnConfirm.setOnClickListener {
+            val text = inputEditText.text.toString().trim()
+            if (text.isNotEmpty()) {
+                addTextToCanvas(text)
+                dialog.dismiss()
+            } else {
+                Toast.makeText(context, "写点什么吧...", Toast.LENGTH_SHORT).show()
+            }
         }
 
-        AlertDialog.Builder(requireContext())
-            .setTitle("添加文字")
-            .setView(inputEditText)
-            .setPositiveButton("添加") { dialog, _ ->
-                val text = inputEditText.text.toString().trim()
-                if (text.isNotEmpty()) {
-                    addTextToCanvas(text)
-                } else {
-                    Toast.makeText(context, "文字不能为空", Toast.LENGTH_SHORT).show()
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton("取消") { dialog, _ ->
-                dialog.cancel()
-            }
-            .show()
+        dialog.show()
+
+        // 自动弹出键盘 (提升体验)
+        inputEditText.requestFocus()
     }
 
     // === A. 添加贴纸逻辑 ===
@@ -179,23 +190,31 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
     // 添加文字到画布
     private fun addTextToCanvas(text: String) {
         // 移除占位文字
-        val placeholder = canvasContainer.findViewById<View>(R.id.tvPlaceholder)
-        if (placeholder != null) {
-            canvasContainer.removeView(placeholder)
+        canvasContainer.findViewById<View>(R.id.tvPlaceholder)?.let {
+            canvasContainer.removeView(it)
         }
 
         val textView = TextView(requireContext()).apply {
             this.text = text
-            setTextColor(ContextCompat.getColor(requireContext(), android.R.color.black)) // 默认黑色文字
-            setTextSize(30f) // 默认文字大小
-            // 可以添加更多字体、颜色等选项，这里先简化
+            textSize = 28f
+            setTextColor(Color.BLACK) // ✨ 改成白色，更百搭
+
+            // ✨ 1. 增加文字阴影，保证在白色图片上也能看清
+            // (半径, X偏移, Y偏移, 颜色)
+            //setShadowLayer(12f, 0f, 4f, Color.parseColor("#80000000"))
+
+            // ✨ 2. 换个高级字体 (衬线体 Serif，或者你有字体文件可以用 createFromAsset)
+            typeface = Typeface.SERIF
+            // 或者设为粗斜体增加设计感:
+            // typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD_ITALIC)
+
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply { gravity = android.view.Gravity.CENTER } // 默认居中
+            ).apply { gravity = Gravity.CENTER }
         }
 
-        // 添加触摸监听 (移动 & 缩放 & 旋转)
+        // 绑定手势
         val touchListener = StickerTouchListener(textView)
         textView.setOnTouchListener(touchListener)
 
