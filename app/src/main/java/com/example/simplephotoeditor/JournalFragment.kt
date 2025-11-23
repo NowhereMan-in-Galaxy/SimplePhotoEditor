@@ -44,6 +44,22 @@ import kotlinx.coroutines.withContext
 import java.io.OutputStream
 import kotlin.math.atan2
 
+// 基础 UI 组件
+import android.widget.GridLayout
+import android.widget.LinearLayout
+import android.widget.SeekBar
+
+
+// 图形与颜色处理
+
+import android.graphics.drawable.GradientDrawable
+
+// 数据结构
+import java.util.ArrayDeque
+
+// 底部弹窗 (Material Design)
+import com.google.android.material.bottomsheet.BottomSheetDialog
+
 class JournalFragment : Fragment(R.layout.fragment_journal) {
 
     private lateinit var canvasContainer: FrameLayout
@@ -333,6 +349,9 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
 
     // === D. 贴纸手势处理逻辑 (内部类) ===
     // 负责处理单张图片的移动、缩放和旋转
+// ===============================================================
+    // ✨ 升级版监听器：保留了你的旋转/缩放逻辑，新增了点击功能
+    // ===============================================================
     private inner class StickerTouchListener(private val view: View) : View.OnTouchListener {
         private var scaleFactor = 1.0f
         private var lastX = 0f
@@ -340,53 +359,68 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
         private var initialRotation = 0f
         private var initialPointerAngle = 0.0
 
-        // 缩放检测器
+        // 1. ✨ 新增：点击识别器 (专门负责弹出样式框)
+        private val gestureDetector = GestureDetector(view.context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean {
+                return true // 必须返回 true，否则点下去没反应
+            }
+
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                // 如果是文字，就弹出样式修改框
+                if (view is TextView) {
+                    showTextStyleDialog(view)
+                }
+                return true
+            }
+        })
+
+        // 2. 原有：缩放检测器 (保持不变)
         private val scaleDetector = ScaleGestureDetector(view.context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 scaleFactor *= detector.scaleFactor
-                scaleFactor = Math.max(0.5f, Math.min(scaleFactor, 3.0f)) // 限制缩放范围
+                scaleFactor = Math.max(0.5f, Math.min(scaleFactor, 3.0f))
                 view.scaleX = scaleFactor
                 view.scaleY = scaleFactor
                 return true
             }
         })
 
-        // 触摸事件处理
+        // 3. 触摸主逻辑
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouch(v: View, event: MotionEvent): Boolean {
-            // 1. 让 ScaleDetector 处理缩放
+            // ✨ 第一步：先让点击识别器看看是不是点击
+            gestureDetector.onTouchEvent(event)
+
+            // 第二步：处理缩放
             scaleDetector.onTouchEvent(event)
 
-            // 2. 处理移动和旋转
+            // 第三步：处理移动和旋转 (你的原有逻辑)
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    // 手指按下时，告诉父容器(ViewPager)别拦截，我要自己动！
                     v.parent.requestDisallowInterceptTouchEvent(true)
                     lastX = event.rawX
                     lastY = event.rawY
-                    // IMPORTANT: Re-sync scaleFactor with the view's current scale
-                    // This ensures that subsequent scaling operations start from the correct base
                     scaleFactor = v.scaleX
-
-                    // Store initial rotation for single pointer
                     initialRotation = v.rotation
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
-                    // Detect two pointers for rotation
                     if (event.pointerCount == 2) {
+                        // 计算两个手指按下时的初始角度差
                         initialPointerAngle = getAngle(event) - v.rotation
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (!scaleDetector.isInProgress) { // 如果不是在缩放，才进行移动和旋转
-                        if (event.pointerCount == 1) { // 移动
+                    if (!scaleDetector.isInProgress) {
+                        if (event.pointerCount == 1) {
+                            // 单指移动
                             val dx = event.rawX - lastX
                             val dy = event.rawY - lastY
                             view.x += dx
                             view.y += dy
                             lastX = event.rawX
                             lastY = event.rawY
-                        } else if (event.pointerCount == 2) { // 旋转
+                        } else if (event.pointerCount == 2) {
+                            // 双指旋转
                             val currentAngle = getAngle(event)
                             view.rotation = (currentAngle - initialPointerAngle).toFloat()
                         }
@@ -394,17 +428,183 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     v.parent.requestDisallowInterceptTouchEvent(false)
-                    initialPointerAngle = 0.0 // Reset for next gesture
+                    initialPointerAngle = 0.0
                 }
             }
             return true
         }
 
-        // 计算两点之间的角度
+        // 计算角度 (你的原有逻辑，稍微补充了 Math.atan2 防止报错)
         private fun getAngle(event: MotionEvent): Double {
             val x = event.getX(0) - event.getX(1)
             val y = event.getY(0) - event.getY(1)
-            return Math.toDegrees(atan2(y.toDouble(), x.toDouble()))
+            // 确保使用 Math.atan2 或者 kotlin.math.atan2
+            return Math.toDegrees(Math.atan2(y.toDouble(), x.toDouble()))
         }
     }
+    // === 1. 在 JournalFragment 类中定义数据 ===
+
+    // 预设高级色板 (32色，涵盖黑白、莫兰迪、复古)
+    private val presetColors = listOf(
+        // Row 2: 基础与灰调
+        "#000000", "#333333", "#666666", "#999999", "#CCCCCC", "#DDDDDD", "#F5F5F5", "#FFFFFF",
+        // Row 3: 莫兰迪/复古暖色
+        "#D4A5A5", "#FFDAC1", "#FF9AA2", "#E2F0CB", "#B5EAD7", "#C7CEEA", "#E0BBE4", "#957DAD",
+        // Row 4: 深邃/经典色
+        "#8E44AD", "#2980B9", "#27AE60", "#16A085", "#F39C12", "#D35400", "#C0392B", "#7F8C8D",
+        // 补充
+        "#2C3E50", "#34495E", "#E74C3C", "#ECF0F1", "#95A5A6", "#7F8C8D", "#3498DB", "#1ABC9C"
+    )
+
+    // 记录最近使用的颜色 (默认存几个基础色)
+    private val recentColors = ArrayDeque<String>(listOf("#000000", "#D35400", "#2980B9", "#FFFFFF"))
+
+    // 字体列表 (Name, Typeface)
+    private val fontStyles = listOf(
+        Pair("默认", Typeface.DEFAULT),
+        Pair("粗黑", Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)),
+        Pair("衬线", Typeface.SERIF),
+        Pair("粗衬线", Typeface.create(Typeface.SERIF, Typeface.BOLD)),
+        Pair("斜体", Typeface.create(Typeface.SERIF, Typeface.ITALIC)),
+        Pair("等宽", Typeface.MONOSPACE),
+        Pair("极细", Typeface.create("sans-serif-light", Typeface.NORMAL)),
+        Pair("手写", Typeface.create("cursive", Typeface.NORMAL)),
+        Pair("标题", Typeface.create("sans-serif-condensed", Typeface.BOLD))
+    )
+
+    // === 2. 新的显示方法 ===
+// === 2. 修改后的显示方法 ===
+    private fun showTextStyleDialog(targetView: TextView) {
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(requireContext())
+        val view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_text_style, null)
+        dialog.setContentView(view)
+
+        // 关键：设置背景透明，否则圆角会被挡住
+        (view.parent as? View)?.setBackgroundColor(Color.TRANSPARENT)
+
+        val gridRecent = view.findViewById<GridLayout>(R.id.gridRecentColors)
+        val gridPreset = view.findViewById<GridLayout>(R.id.gridPresetColors)
+        val containerFonts = view.findViewById<LinearLayout>(R.id.containerFonts)
+
+        // HSV 组件
+        val viewPreview = view.findViewById<View>(R.id.viewColorPreview)
+        val seekH = view.findViewById<SeekBar>(R.id.seekBarHue)
+        val seekS = view.findViewById<SeekBar>(R.id.seekBarSat)
+        val seekV = view.findViewById<SeekBar>(R.id.seekBarVal)
+        val btnConfirm = view.findViewById<View>(R.id.btnConfirmColor)
+
+        // --- A. 刷新颜色的辅助函数 ---
+        fun refreshColorGrids() {
+            // 1. 最近使用 (取前10个)
+            gridRecent.removeAllViews()
+            recentColors.take(12).forEach { colorHex ->
+                addColorCircleToGrid(gridRecent, colorHex, targetView) { }
+            }
+
+            // 2. 预设色板
+            gridPreset.removeAllViews()
+            presetColors.forEach { colorHex ->
+                addColorCircleToGrid(gridPreset, colorHex, targetView) {
+                    if (recentColors.contains(colorHex)) recentColors.remove(colorHex)
+                    recentColors.addFirst(colorHex)
+                    refreshColorGrids()
+                }
+            }
+        }
+
+        refreshColorGrids()
+
+        // --- B. 填充字体 (缩小版) ---
+        containerFonts.removeAllViews()
+        fontStyles.forEach { (name, typeface) ->
+            val tvFont = android.widget.TextView(context).apply {
+                text = "Aa\n$name"
+                this.typeface = typeface
+                textSize = 12f // 字体变小
+                setTextColor(Color.parseColor("#333333"))
+                gravity = Gravity.CENTER
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor("#F5F5F5"))
+                    cornerRadius = 12f
+                }
+                // 尺寸改小：120x120
+                layoutParams = LinearLayout.LayoutParams(120, 120).apply { marginEnd = 16 }
+
+                setOnClickListener {
+                    targetView.typeface = typeface
+                }
+            }
+            containerFonts.addView(tvFont)
+        }
+
+        // --- C. HSV 滑条逻辑 ---
+        val currentHsv = FloatArray(3)
+        Color.colorToHSV(targetView.currentTextColor, currentHsv)
+
+        seekH.progress = currentHsv[0].toInt()
+        seekS.progress = (currentHsv[1] * 100).toInt()
+        seekV.progress = (currentHsv[2] * 100).toInt()
+        viewPreview.setBackgroundColor(targetView.currentTextColor)
+
+        val seekBarListener = object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    currentHsv[0] = seekH.progress.toFloat()
+                    currentHsv[1] = seekS.progress / 100f
+                    currentHsv[2] = seekV.progress / 100f
+
+                    val color = Color.HSVToColor(currentHsv)
+                    // 只改变文字和预览条，不存入最近使用
+                    targetView.setTextColor(color)
+                    viewPreview.setBackgroundColor(color)
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        }
+
+        seekH.setOnSeekBarChangeListener(seekBarListener)
+        seekS.setOnSeekBarChangeListener(seekBarListener)
+        seekV.setOnSeekBarChangeListener(seekBarListener)
+
+        // --- D. 确认按钮逻辑 (存入最近使用) ---
+        btnConfirm.setOnClickListener {
+            val color = Color.HSVToColor(currentHsv)
+            val hex = String.format("#%06X", (0xFFFFFF and color))
+
+            if (recentColors.contains(hex)) recentColors.remove(hex)
+            recentColors.addFirst(hex)
+            refreshColorGrids()
+
+            Toast.makeText(context, "颜色已保存", Toast.LENGTH_SHORT).show()
+        }
+
+        dialog.show()
+    }
+
+    // 辅助：更小巧精致的圆点
+    private fun addColorCircleToGrid(grid: GridLayout, colorHex: String, targetView: TextView, onClick: () -> Unit) {
+        // 尺寸改为 24dp (约 70px)
+        val size = 70
+
+        val view = View(context).apply {
+            layoutParams = GridLayout.LayoutParams().apply {
+                width = size
+                height = size
+                setMargins(6, 6, 6, 6) // 间距紧凑一点
+            }
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Color.parseColor(colorHex))
+                setStroke(1, Color.parseColor("#DDDDDD"))
+            }
+            setOnClickListener {
+                targetView.setTextColor(Color.parseColor(colorHex))
+                onClick()
+            }
+        }
+        grid.addView(view)
+    }
+
+    // 辅助：往 Grid 里加一个小圆点
 }

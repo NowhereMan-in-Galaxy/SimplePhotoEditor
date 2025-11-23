@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="380dp"
+    android:orientation="vertical"
+    android:background="@android:color/white"
+    android:paddingBottom="16dp">
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:background="#E0E0E0"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp"/>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingBottom="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="字体"
+                android:textSize="12sp"
+                android:textColor="#999999"
+                android:layout_marginBottom="8dp"/>
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:layout_marginBottom="20dp">
+                <LinearLayout
+                    android:id="@+id/containerFonts"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"/>
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="最近使用"
+                    android:textSize="12sp"
+                    android:textColor="#999999"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="高级色板"
+                    android:textSize="12sp"
+                    android:textColor="#999999"/>
+            </LinearLayout>
+
+            <GridLayout
+                android:id="@+id/gridRecentColors"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="11"
+                android:rowCount="1"
+                android:layout_marginBottom="12dp"/>
+
+            <GridLayout
+                android:id="@+id/gridPresetColors"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="11"
+                android:layout_marginBottom="24dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="自定义调色"
+                android:textSize="12sp"
+                android:textColor="#999999"
+                android:layout_marginBottom="12dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:background="#F9F9F9"
+                android:padding="12dp"
+                android:gravity="center_vertical">
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    android:layout_marginEnd="12dp">
+                    <View
+                        android:id="@+id/viewColorPreview"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="#000000"/>
+                </androidx.cardview.widget.CardView>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <SeekBar
+                        android:id="@+id/seekBarHue"
+                        android:layout_width="match_parent"
+                        android:layout_height="24dp"
+                        android:max="360"
+                        android:thumbTint="#FF5722"
+                        android:progressTint="#FF5722"/>
+                    <SeekBar
+                        android:id="@+id/seekBarSat"
+                        android:layout_width="match_parent"
+                        android:layout_height="24dp"
+                        android:max="100"
+                        android:thumbTint="#2196F3"
+                        android:progressTint="#2196F3"/>
+                    <SeekBar
+                        android:id="@+id/seekBarVal"
+                        android:layout_width="match_parent"
+                        android:layout_height="24dp"
+                        android:max="100"
+                        android:thumbTint="#607D8B"
+                        android:progressTint="#607D8B"/>
+                </LinearLayout>
+
+                <ImageView
+                    android:id="@+id/btnConfirmColor"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:src="@android:drawable/ic_menu_save"
+                    android:padding="6dp"
+                    android:background="@drawable/bg_tool_circle"
+                    android:backgroundTint="#222222"
+                    app:tint="#FFFFFF"
+                    android:layout_marginStart="12dp"/>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>
