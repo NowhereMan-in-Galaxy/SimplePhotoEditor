@@ -65,9 +65,9 @@ class EditorFragment : Fragment(R.layout.fragment_editor) {
 
     // 菜单数据
     private val mainTools = listOf(
-        EditorTool(TOOL_MASK, "蒙版", android.R.drawable.ic_menu_crop),
-        EditorTool(TOOL_CLOUD, "色彩云", android.R.drawable.ic_menu_view),
-        EditorTool(TOOL_AI, "AI识别", android.R.drawable.ic_menu_camera)
+        EditorTool(TOOL_MASK, "蒙版", R.drawable.ic_mask),
+        EditorTool(TOOL_CLOUD, "色彩云", R.drawable.ic_cloud),
+        EditorTool(TOOL_AI, "AI识别", R.drawable.ic_detect)
     )
 
     private val maskTools = listOf(

@@ -43,8 +43,8 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
 
     // 简单的功能菜单
     private val journalTools = listOf(
-        EditorTool(1, "清空", android.R.drawable.ic_menu_delete),
-        EditorTool(2, "背景", android.R.drawable.ic_menu_gallery)
+        EditorTool(1, "清空", R.drawable.ic_empty),
+        EditorTool(2, "背景", R.drawable.ic_background)
     )
 
     @SuppressLint("ClickableViewAccessibility")
@@ -112,7 +112,7 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
         checkPermissionAndLoadPhotos()
 
         // 5. 保存按钮逻辑
-        view.findViewById<View>(R.id.btnSaveJournal).setOnClickListener {
+        view.findViewById<View>(R.id.btnSave).setOnClickListener {
             saveCanvasToGallery()
         }
     }

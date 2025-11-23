@@ -5,13 +5,12 @@
     android:layout_height="wrap_content"
     android:gravity="center"
     android:orientation="vertical"
-    android:paddingHorizontal="16dp"
+    android:paddingHorizontal="8dp"
     android:paddingVertical="8dp">
 
     <FrameLayout
         android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:background="@drawable/bg_tool_circle"> <ImageView
+        android:layout_height="48dp"> <ImageView
         android:id="@+id/toolIcon"
         android:layout_width="24dp"
         android:layout_height="24dp"
@@ -28,6 +27,7 @@
         android:text="Mask"
         android:textColor="#99FFFFFF"
         android:textSize="12sp"
-        android:letterSpacing="0.05"/>
+        android:letterSpacing="0.05"
+        android:visibility="gone"/>
 </LinearLayout>
 
