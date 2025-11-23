@@ -89,6 +89,19 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
         super.onViewCreated(view, savedInstanceState)
 
         canvasContainer = view.findViewById(R.id.canvasContainer)
+        canvasContainer.setOnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    // 手指按下：锁死 ViewPager
+                    v.parent.requestDisallowInterceptTouchEvent(true)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    // 手指抬起：解锁 (虽然抬起了也翻不了页，但为了逻辑闭环)
+                    v.parent.requestDisallowInterceptTouchEvent(false)
+                }
+            }
+            true // 返回 true，表示“我消费了这个事件”，不传给下面了
+        }
 
         // 1. 沉浸式适配
         val topBar = view.findViewById<View>(R.id.journalTopBar)
@@ -347,102 +360,194 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
         }
     }
 
-    // === D. 贴纸手势处理逻辑 (内部类) ===
-    // 负责处理单张图片的移动、缩放和旋转
+    // ✨ 丝滑防抖版：全 Raw 坐标计算 + 动态滤波 (解决缩放抖动)
+    // ===============================================================
 // ===============================================================
-    // ✨ 升级版监听器：保留了你的旋转/缩放逻辑，新增了点击功能
+    // ✨ 最终完美版：Instagram 算法 + 智能防抖阈值 (解决抖动/误触)
     // ===============================================================
     private inner class StickerTouchListener(private val view: View) : View.OnTouchListener {
-        private var scaleFactor = 1.0f
-        private var lastX = 0f
-        private var lastY = 0f
-        private var initialRotation = 0f
-        private var initialPointerAngle = 0.0
 
-        // 1. ✨ 新增：点击识别器 (专门负责弹出样式框)
         private val gestureDetector = GestureDetector(view.context, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent): Boolean {
-                return true // 必须返回 true，否则点下去没反应
-            }
-
+            override fun onDown(e: MotionEvent): Boolean = true
             override fun onSingleTapUp(e: MotionEvent): Boolean {
-                // 如果是文字，就弹出样式修改框
-                if (view is TextView) {
-                    showTextStyleDialog(view)
-                }
+                if (view is TextView) showTextStyleDialog(view)
                 return true
             }
         })
 
-        // 2. 原有：缩放检测器 (保持不变)
-        private val scaleDetector = ScaleGestureDetector(view.context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                scaleFactor *= detector.scaleFactor
-                scaleFactor = Math.max(0.5f, Math.min(scaleFactor, 3.0f))
-                view.scaleX = scaleFactor
-                view.scaleY = scaleFactor
-                return true
-            }
-        })
+        // 状态变量
+        private var lastCentroidX = 0f
+        private var lastCentroidY = 0f
+        private var lastDistance = 0f
+        private var lastAngle = 0.0
 
-        // 3. 触摸主逻辑
-        @SuppressLint("ClickableViewAccessibility")
+        // 防抖阈值记录
+        private var initialDistance = 0f
+        private var initialAngle = 0.0
+        private var isScaling = false
+        private var isRotating = false
+
+        private var activePointerId1 = -1
+        private var activePointerId2 = -1
+
         override fun onTouch(v: View, event: MotionEvent): Boolean {
-            // ✨ 第一步：先让点击识别器看看是不是点击
             gestureDetector.onTouchEvent(event)
 
-            // 第二步：处理缩放
-            scaleDetector.onTouchEvent(event)
+            // 屏幕绝对坐标偏移量
+            val rawOffsetX = event.rawX - event.x
+            val rawOffsetY = event.rawY - event.y
 
-            // 第三步：处理移动和旋转 (你的原有逻辑)
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    activePointerId1 = event.getPointerId(0)
+                    activePointerId2 = -1
+                    lastCentroidX = event.rawX
+                    lastCentroidY = event.rawY
                     v.parent.requestDisallowInterceptTouchEvent(true)
-                    lastX = event.rawX
-                    lastY = event.rawY
-                    scaleFactor = v.scaleX
-                    initialRotation = v.rotation
                 }
+
                 MotionEvent.ACTION_POINTER_DOWN -> {
-                    if (event.pointerCount == 2) {
-                        // 计算两个手指按下时的初始角度差
-                        initialPointerAngle = getAngle(event) - v.rotation
+                    if (activePointerId2 == -1) {
+                        activePointerId2 = event.getPointerId(event.actionIndex)
+
+                        // 重置基准
+                        val (cx, cy) = getRawCentroid(event, rawOffsetX, rawOffsetY)
+                        lastCentroidX = cx
+                        lastCentroidY = cy
+                        lastDistance = getRawSpan(event, rawOffsetX, rawOffsetY)
+                        lastAngle = getRawAngle(event, rawOffsetX, rawOffsetY)
+
+                        // 记录“初始状态”用于防抖判断
+                        initialDistance = lastDistance
+                        initialAngle = lastAngle
+                        isScaling = false
+                        isRotating = false
                     }
                 }
+
                 MotionEvent.ACTION_MOVE -> {
-                    if (!scaleDetector.isInProgress) {
-                        if (event.pointerCount == 1) {
-                            // 单指移动
-                            val dx = event.rawX - lastX
-                            val dy = event.rawY - lastY
-                            view.x += dx
-                            view.y += dy
-                            lastX = event.rawX
-                            lastY = event.rawY
-                        } else if (event.pointerCount == 2) {
-                            // 双指旋转
-                            val currentAngle = getAngle(event)
-                            view.rotation = (currentAngle - initialPointerAngle).toFloat()
+                    val (cx, cy) = getRawCentroid(event, rawOffsetX, rawOffsetY)
+
+                    // 1. 处理移动 (始终生效，保持跟手)
+                    val dx = cx - lastCentroidX
+                    val dy = cy - lastCentroidY
+                    view.x += dx
+                    view.y += dy
+
+                    // 2. 处理缩放 & 旋转 (带门槛)
+                    if (activePointerId1 != -1 && activePointerId2 != -1 && event.pointerCount >= 2) {
+                        val currentDistance = getRawSpan(event, rawOffsetX, rawOffsetY)
+                        val currentAngle = getRawAngle(event, rawOffsetX, rawOffsetY)
+
+                        // --- A. 缩放逻辑 ---
+                        // 计算相对于“按下那一刻”的变化率
+                        val spanDelta = Math.abs(currentDistance - initialDistance)
+
+                        // 门槛：只有当距离变化超过 10px 时，才“激活”缩放模式
+                        if (!isScaling && spanDelta > 20f) {
+                            isScaling = true // 激活！
+                            lastDistance = currentDistance // 重新对齐基准，防止突变
+                        }
+
+                        if (isScaling && lastDistance > 10f) {
+                            val scale = currentDistance / lastDistance
+                            var newScale = view.scaleX * scale
+                            newScale = newScale.coerceIn(0.1f, 5.0f)
+                            view.scaleX = newScale
+                            view.scaleY = newScale
+                            lastDistance = currentDistance
+                        }
+
+                        // --- B. 旋转逻辑 ---
+                        // 计算相对于“按下那一刻”的角度差
+                        val angleDelta = Math.abs(currentAngle - initialAngle)
+
+                        // 门槛：只有当角度变化超过 3 度时，才“激活”旋转模式
+                        // 这能有效过滤掉手指按压时的微小晃动
+                        if (!isRotating && angleDelta > 3.0) {
+                            isRotating = true // 激活！
+                            lastAngle = currentAngle // 重新对齐基准
+                        }
+
+                        if (isRotating) {
+                            val deltaAngle = currentAngle - lastAngle
+                            view.rotation += deltaAngle.toFloat()
+                            lastAngle = currentAngle
+                        }
+                    }
+
+                    lastCentroidX = cx
+                    lastCentroidY = cy
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                    val pointerIndex = event.actionIndex
+                    val pointerId = event.getPointerId(pointerIndex)
+                    if (pointerId == activePointerId1 || pointerId == activePointerId2) {
+                        val newIndex = if (pointerIndex == 0) 1 else 0
+                        if (event.pointerCount > 1) {
+                            val (nx, ny) = getRawPoint(event, newIndex, rawOffsetX, rawOffsetY)
+                            lastCentroidX = nx
+                            lastCentroidY = ny
+                            activePointerId1 = event.getPointerId(newIndex)
+                            activePointerId2 = -1
+
+                            // 重置防抖状态
+                            isScaling = false
+                            isRotating = false
+                        } else {
+                            activePointerId1 = -1
+                            activePointerId2 = -1
                         }
                     }
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+
+                MotionEvent.ACTION_CANCEL -> {
+                    activePointerId1 = -1
+                    activePointerId2 = -1
                     v.parent.requestDisallowInterceptTouchEvent(false)
-                    initialPointerAngle = 0.0
                 }
             }
             return true
         }
 
-        // 计算角度 (你的原有逻辑，稍微补充了 Math.atan2 防止报错)
-        private fun getAngle(event: MotionEvent): Double {
-            val x = event.getX(0) - event.getX(1)
-            val y = event.getY(0) - event.getY(1)
-            // 确保使用 Math.atan2 或者 kotlin.math.atan2
-            return Math.toDegrees(Math.atan2(y.toDouble(), x.toDouble()))
+        // --- 辅助方法 (保持不变) ---
+        private fun getRawPoint(event: MotionEvent, index: Int, offX: Float, offY: Float): Pair<Float, Float> {
+            return Pair(event.getX(index) + offX, event.getY(index) + offY)
+        }
+
+        private fun getRawCentroid(event: MotionEvent, offX: Float, offY: Float): Pair<Float, Float> {
+            val index1 = event.findPointerIndex(activePointerId1)
+            val index2 = event.findPointerIndex(activePointerId2)
+            if (index1 != -1 && index2 != -1) {
+                val (x1, y1) = getRawPoint(event, index1, offX, offY)
+                val (x2, y2) = getRawPoint(event, index2, offX, offY)
+                return Pair((x1 + x2) / 2, (y1 + y2) / 2)
+            } else if (index1 != -1) {
+                return getRawPoint(event, index1, offX, offY)
+            }
+            return Pair(event.rawX, event.rawY)
+        }
+
+        private fun getRawSpan(event: MotionEvent, offX: Float, offY: Float): Float {
+            val index1 = event.findPointerIndex(activePointerId1)
+            val index2 = event.findPointerIndex(activePointerId2)
+            if (index1 == -1 || index2 == -1) return lastDistance
+            val (x1, y1) = getRawPoint(event, index1, offX, offY)
+            val (x2, y2) = getRawPoint(event, index2, offX, offY)
+            return Math.hypot((x2 - x1).toDouble(), (y2 - y1).toDouble()).toFloat()
+        }
+
+        private fun getRawAngle(event: MotionEvent, offX: Float, offY: Float): Double {
+            val index1 = event.findPointerIndex(activePointerId1)
+            val index2 = event.findPointerIndex(activePointerId2)
+            if (index1 == -1 || index2 == -1) return lastAngle
+            val (x1, y1) = getRawPoint(event, index1, offX, offY)
+            val (x2, y2) = getRawPoint(event, index2, offX, offY)
+            return Math.toDegrees(Math.atan2((y2 - y1).toDouble(), (x2 - x1).toDouble()))
         }
     }
-    // === 1. 在 JournalFragment 类中定义数据 ===
+    // ===============================================================
 
     // 预设高级色板 (32色，涵盖黑白、莫兰迪、复古)
     private val presetColors = listOf(

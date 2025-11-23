@@ -172,8 +172,22 @@ class EditorFragment : Fragment(R.layout.fragment_editor) {
             override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
                 // 注意：OpenGL坐标系和屏幕坐标系比例不同，简单除以 500 只是一个经验值，
                 // 严谨做法是根据 View 宽高换算，但这里为了手感顺滑直接调参即可。
-                mTransX -= distanceX / 500f
-                mTransY -= distanceY / 500f // Y轴方向相反
+                //mTransX -= distanceX / 500f
+                //mTransY -= distanceY / 500f // Y轴方向相反
+                // 【修改后】使用视图的实际宽度计算，实现 1:1 跟手
+                // 注意：OpenGL 纹理坐标是 0~1，所以移动比例 = 像素距离 / 视图尺寸
+                // 这里可能需要根据你的 Texture 缩放逻辑微调，但除以 width 是最通用的做法
+                val viewWidth = glSurfaceView.width.toFloat()
+                val viewHeight = glSurfaceView.height.toFloat()
+
+                // 避免除以0
+                if (viewWidth > 0 && viewHeight > 0) {
+                    // 这里的系数 2.0f 是因为 OpenGL 坐标系通常是 -1 到 1 (跨度2)，
+                    // 或者根据你的 Shader 逻辑 (Fit Center) 调整。
+                    // 建议先试除以 viewWidth，如果太慢就乘个系数。
+                    mTransX -= distanceX / viewWidth
+                    mTransY -= distanceY / viewWidth // 通常统一用宽度做分母以保持XY移动比例一致
+                }
                 updateRenderer()
                 return true
             }
