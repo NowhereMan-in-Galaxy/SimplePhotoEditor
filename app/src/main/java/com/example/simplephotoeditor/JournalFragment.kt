@@ -17,10 +17,13 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -35,6 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
+import kotlin.math.atan2
 
 class JournalFragment : Fragment(R.layout.fragment_journal) {
 
@@ -44,15 +48,13 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
     // 简单的功能菜单
     private val journalTools = listOf(
         EditorTool(1, "清空", R.drawable.ic_empty),
-        EditorTool(2, "背景", R.drawable.ic_background)
+        EditorTool(2, "背景", R.drawable.ic_background),
+        EditorTool(3, "文字", R.drawable.ic_text) // 添加文字工具
     )
 
     @SuppressLint("ClickableViewAccessibility")
-    // JournalFragment.kt
-
     override fun onResume() {
         super.onResume()
-        // 每次滑过来，刷新相册，让你刚做好的图立刻出现
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_IMAGES
         } else {
@@ -96,6 +98,9 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
                     canvasContainer.addView(placeholder)
                 }
                 2 -> Toast.makeText(context, "背景功能待开发...", Toast.LENGTH_SHORT).show()
+                3 -> { // 文字工具
+                    showTextInputDialog()
+                }
             }
         }
 
@@ -117,6 +122,34 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
         }
     }
 
+    // 显示文字输入对话框
+    private fun showTextInputDialog() {
+        val inputEditText = EditText(requireContext()).apply {
+            hint = "请输入文字"
+            setTextSize(18f)
+            setTextColor(ContextCompat.getColor(requireContext(), android.R.color.black))
+            setBackgroundColor(ContextCompat.getColor(requireContext(), android.R.color.white))
+            setPadding(32, 32, 32, 32)
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("添加文字")
+            .setView(inputEditText)
+            .setPositiveButton("添加") { dialog, _ ->
+                val text = inputEditText.text.toString().trim()
+                if (text.isNotEmpty()) {
+                    addTextToCanvas(text)
+                } else {
+                    Toast.makeText(context, "文字不能为空", Toast.LENGTH_SHORT).show()
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消") { dialog, _ ->
+                dialog.cancel()
+            }
+            .show()
+    }
+
     // === A. 添加贴纸逻辑 ===
     private fun addStickerToCanvas(uri: Uri) {
         // 移除占位文字
@@ -135,12 +168,38 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
         // 加载图片
         Glide.with(this).load(uri).into(sticker)
 
-        // 添加触摸监听 (移动 & 缩放)
+        // 添加触摸监听 (移动 & 缩放 & 旋转)
         val touchListener = StickerTouchListener(sticker)
         sticker.setOnTouchListener(touchListener)
 
         // 添加到画布
         canvasContainer.addView(sticker)
+    }
+
+    // 添加文字到画布
+    private fun addTextToCanvas(text: String) {
+        // 移除占位文字
+        val placeholder = canvasContainer.findViewById<View>(R.id.tvPlaceholder)
+        if (placeholder != null) {
+            canvasContainer.removeView(placeholder)
+        }
+
+        val textView = TextView(requireContext()).apply {
+            this.text = text
+            setTextColor(ContextCompat.getColor(requireContext(), android.R.color.black)) // 默认黑色文字
+            setTextSize(30f) // 默认文字大小
+            // 可以添加更多字体、颜色等选项，这里先简化
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = android.view.Gravity.CENTER } // 默认居中
+        }
+
+        // 添加触摸监听 (移动 & 缩放 & 旋转)
+        val touchListener = StickerTouchListener(textView)
+        textView.setOnTouchListener(touchListener)
+
+        canvasContainer.addView(textView)
     }
 
     // === B. 保存画布逻辑 (View -> Bitmap -> MediaStore) ===
@@ -254,11 +313,13 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
     }
 
     // === D. 贴纸手势处理逻辑 (内部类) ===
-    // 负责处理单张图片的移动和缩放
+    // 负责处理单张图片的移动、缩放和旋转
     private inner class StickerTouchListener(private val view: View) : View.OnTouchListener {
         private var scaleFactor = 1.0f
         private var lastX = 0f
         private var lastY = 0f
+        private var initialRotation = 0f
+        private var initialPointerAngle = 0.0
 
         // 缩放检测器
         private val scaleDetector = ScaleGestureDetector(view.context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -272,11 +333,12 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
         })
 
         // 触摸事件处理
+        @SuppressLint("ClickableViewAccessibility")
         override fun onTouch(v: View, event: MotionEvent): Boolean {
             // 1. 让 ScaleDetector 处理缩放
             scaleDetector.onTouchEvent(event)
 
-            // 2. 处理移动和冲突
+            // 2. 处理移动和旋转
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     // 手指按下时，告诉父容器(ViewPager)别拦截，我要自己动！
@@ -286,22 +348,44 @@ class JournalFragment : Fragment(R.layout.fragment_journal) {
                     // IMPORTANT: Re-sync scaleFactor with the view's current scale
                     // This ensures that subsequent scaling operations start from the correct base
                     scaleFactor = v.scaleX
+
+                    // Store initial rotation for single pointer
+                    initialRotation = v.rotation
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    // Detect two pointers for rotation
+                    if (event.pointerCount == 2) {
+                        initialPointerAngle = getAngle(event) - v.rotation
+                    }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (!scaleDetector.isInProgress) { // 如果不是在缩放，才进行移动
-                        val dx = event.rawX - lastX
-                        val dy = event.rawY - lastY
-                        view.x += dx
-                        view.y += dy
-                        lastX = event.rawX
-                        lastY = event.rawY
+                    if (!scaleDetector.isInProgress) { // 如果不是在缩放，才进行移动和旋转
+                        if (event.pointerCount == 1) { // 移动
+                            val dx = event.rawX - lastX
+                            val dy = event.rawY - lastY
+                            view.x += dx
+                            view.y += dy
+                            lastX = event.rawX
+                            lastY = event.rawY
+                        } else if (event.pointerCount == 2) { // 旋转
+                            val currentAngle = getAngle(event)
+                            view.rotation = (currentAngle - initialPointerAngle).toFloat()
+                        }
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     v.parent.requestDisallowInterceptTouchEvent(false)
+                    initialPointerAngle = 0.0 // Reset for next gesture
                 }
             }
             return true
+        }
+
+        // 计算两点之间的角度
+        private fun getAngle(event: MotionEvent): Double {
+            val x = event.getX(0) - event.getX(1)
+            val y = event.getY(0) - event.getY(1)
+            return Math.toDegrees(atan2(y.toDouble(), x.toDouble()))
         }
     }
 }
